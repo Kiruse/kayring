@@ -23,6 +23,7 @@ enum Commands {
   Set(SetArgs),
   Get(GetArgs),
   List(ListArgs),
+  Clone(CloneArgs),
 }
 
 #[derive(Args, Debug)]
@@ -87,6 +88,23 @@ struct ListArgs {
   dir: Option<String>,
 }
 
+#[derive(Args, Debug)]
+struct CloneArgs {
+  /// Name of the private key to clone.
+  from: String,
+
+  /// Name of the cloned private key.
+  to: String,
+
+  /// Overwrite the key if it already exists.
+  #[arg(short = 'f', long)]
+  force: bool,
+
+  /// Path to the directory where the keystores are saved
+  #[arg(long, env = "KAYRING_DIR")]
+  dir: Option<String>,
+}
+
 fn main() {
   let cli = Cli::parse();
 
@@ -94,6 +112,7 @@ fn main() {
     Commands::Set(args) => sub_set(args),
     Commands::Get(args) => sub_get(args),
     Commands::List(args) => sub_list(args),
+    Commands::Clone(args) => sub_clone(args),
   };
   if let Err(e) = res {
     eprintln!("{}", e);
@@ -243,6 +262,27 @@ fn sub_list(args: ListArgs) -> Result<(), String> {
   if has_errs {
     eprintln!("Some entries could not be read.");
   }
+
+  Ok(())
+}
+
+fn sub_clone(args: CloneArgs) -> Result<(), String> {
+  let dirpath = rootdir(args.dir)?;
+  let frompath = dirpath.join(&args.from);
+  let topath = dirpath.join(&args.to);
+
+  if !frompath.exists() {
+    return Err(format!("No kaystore found for {}", args.from));
+  }
+
+  if topath.exists() && !args.force {
+    return Err(format!("A kaystore {} already exists. Use --force to overwrite.", args.to));
+  }
+
+  fs::copy(frompath.clone(), topath.clone())
+    .map_err(|err| {
+      format!("Could not copy from {} to {}: {}", frompath.to_string_lossy(), topath.to_string_lossy(), err)
+    })?;
 
   Ok(())
 }
